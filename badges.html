@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Code Clicker - Badges & Achievements</title>
+    <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="badges.css" />
+  </head>
+  <body>
+    <div id="app" class="badges-page">
+      <header class="top-bar">
+        <div class="logo">Code Clicker</div>
+        <div class="stats">
+          <div class="stat">
+            <span class="label">Badges débloqués</span>
+            <span id="badgeCount" class="value">0</span>
+          </div>
+          <div class="stat">
+            <span class="label">Total Bytes</span>
+            <span id="badgeBytes" class="value">0</span>
+          </div>
+        </div>
+      </header>
+
+      <main class="layout-badges">
+        <section class="panel">
+          <h2>Badges & Achievements</h2>
+          <p class="description">
+            Retrouvez ici tous vos badges débloqués dans
+            <strong>Code Clicker : De Zéro au Mégacorp</strong>. Revenez jouer
+            pour en débloquer de nouveaux !
+          </p>
+          <div id="badgeGrid" class="badge-grid">
+            <!-- Cartes de badges générées dynamiquement -->
+          </div>
+        </section>
+      </main>
+
+      <footer class="footer">
+        <span>// Vos badges sont synchronisés avec votre sauvegarde locale.</span>
+        <a href="index.html" class="secondary-button">Retour au jeu</a>
+      </footer>
+    </div>
+
+    <script src="badges.js"></script>
+  </body>
+  </html>
+
+

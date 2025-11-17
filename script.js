@@ -68,6 +68,38 @@ const UPGRADE_CATALOG = [
     type: "flat_click",
     value: 5,
   },
+  {
+    id: "designPatterns",
+    name: "Design Patterns",
+    description: "x2 Bytes par clic.",
+    cost: 45000,
+    type: "multiplier_click",
+    value: 2,
+  },
+  {
+    id: "profiling",
+    name: "Profiling & Optimisation",
+    description: "x2 production passive.",
+    cost: 90000,
+    type: "multiplier_passive",
+    value: 2,
+  },
+  {
+    id: "aiPairProgrammer",
+    name: "IA Pair Programmer",
+    description: "+50 Bytes / sec.",
+    cost: 200000,
+    type: "flat_passive",
+    value: 50,
+  },
+  {
+    id: "architecteEntreprise",
+    name: "Architecte d'entreprise",
+    description: "+15 Bytes par clic.",
+    cost: 500000,
+    type: "flat_click",
+    value: 15,
+  },
 ];
 
 const GENERATOR_CATALOG = [
@@ -127,6 +159,30 @@ const GENERATOR_CATALOG = [
     costMultiplier: 1.25,
     description: "Votre empire logiciel tourne à l'échelle planétaire.",
   },
+  {
+    id: "incubateurStartups",
+    name: "Incubateur de Startups",
+    baseCost: 800000,
+    baseProduction: 3800,
+    costMultiplier: 1.25,
+    description: "Vous lancez 10 projets par an, 1 devient un succès mondial.",
+  },
+  {
+    id: "cloudCluster",
+    name: "Cluster Cloud",
+    baseCost: 2500000,
+    baseProduction: 12000,
+    costMultiplier: 1.27,
+    description: "Des milliers de serveurs qui build en continu.",
+  },
+  {
+    id: "labRAndD",
+    name: "Lab R&D",
+    baseCost: 8000000,
+    baseProduction: 42000,
+    costMultiplier: 1.3,
+    description: "Recherche de nouvelles techno qui explosent la productivité.",
+  },
 ];
 
 const ACHIEVEMENT_CATALOG = [
@@ -179,6 +235,34 @@ const ACHIEVEMENT_CATALOG = [
     type: "hyperfocus_used",
     threshold: 1,
   },
+  {
+    id: "click_master",
+    name: "Maître du clic",
+    description: "Atteindre au moins 100 Bytes par clic.",
+    type: "ppc_reached",
+    threshold: 100,
+  },
+  {
+    id: "factory_mode",
+    name: "Usine à bytes",
+    description: "Atteindre au moins 1 000 Bytes par seconde.",
+    type: "pps_reached",
+    threshold: 1000,
+  },
+  {
+    id: "offline_grinder",
+    name: "Grinder hors-ligne",
+    description: "Gagner au moins 50 000 bytes en étant hors-ligne.",
+    type: "offline_bytes",
+    threshold: 50_000,
+  },
+  {
+    id: "collectionneur",
+    name: "Collectionneur de badges",
+    description: "Débloquer au moins 10 achievements.",
+    type: "achievements_unlocked",
+    threshold: 10,
+  },
 ];
 
 // -----------------------------
@@ -201,6 +285,7 @@ const defaultGameState = {
     currentCooldown: 0,
     timesUsed: 0,
   },
+  offlineBytesEarned: 0,
   lastSaveTimestamp: Date.now(),
 };
 
@@ -415,6 +500,8 @@ function loadGame() {
     if (offlineGain > 0) {
       gameState.bytes += offlineGain;
       gameState.totalBytesEarned += offlineGain;
+      gameState.offlineBytesEarned =
+        (gameState.offlineBytesEarned || 0) + offlineGain;
       showLog(
         `// Vous revenez après ${diffSeconds.toFixed(
           0
@@ -547,6 +634,20 @@ function checkAchievements() {
         break;
       case "hyperfocus_used":
         fulfilled = gameState.activeBoost.timesUsed >= ach.threshold;
+        break;
+      case "ppc_reached":
+        fulfilled = gameState.productionPerClick >= ach.threshold;
+        break;
+      case "pps_reached":
+        fulfilled = gameState.productionPerSecond >= ach.threshold;
+        break;
+      case "offline_bytes":
+        fulfilled = (gameState.offlineBytesEarned || 0) >= ach.threshold;
+        break;
+      case "achievements_unlocked":
+        fulfilled =
+          Object.values(gameState.achievements).filter(Boolean).length >=
+          ach.threshold;
         break;
     }
 
