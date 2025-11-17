@@ -393,6 +393,89 @@ const ACHIEVEMENT_CATALOG = [
   },
 ];
 
+const QUEST_CATALOG = [
+  {
+    id: "earn_5k",
+    description: "Gagner 5 000 bytes aujourd'hui.",
+    type: "earn_bytes",
+    target: 5_000,
+    reward: 1_000,
+  },
+  {
+    id: "click_marathon",
+    description: "Effectuer 150 clics.",
+    type: "click_times",
+    target: 150,
+    reward: 1_200,
+  },
+  {
+    id: "hire_team",
+    description: "Acheter 5 générateurs.",
+    type: "buy_generators",
+    target: 5,
+    reward: 2_500,
+  },
+  {
+    id: "upgrade_suite",
+    description: "Acheter 3 compétences.",
+    type: "buy_upgrades",
+    target: 3,
+    reward: 2_000,
+  },
+  {
+    id: "spender",
+    description: "Dépenser 25 000 bytes.",
+    type: "spend_bytes",
+    target: 25_000,
+    reward: 1_800,
+  },
+  {
+    id: "hyper_master",
+    description: "Activer Hyperfocus 3 fois.",
+    type: "use_boost",
+    target: 3,
+    reward: 2_200,
+  },
+];
+
+const QUEST_SLOTS = 3;
+const QUEST_DURATION_MS = 6 * 60 * 60 * 1000; // 6 heures
+
+const EVENT_CATALOG = [
+  {
+    id: "coffeeRush",
+    name: "Rush Caféiné",
+    description: "Vos clics valent x2 pendant 60s.",
+    duration: 60,
+    clickMultiplier: 2,
+  },
+  {
+    id: "serverOverdrive",
+    name: "Serveurs en surchauffe",
+    description: "Production passive x2 pendant 60s.",
+    duration: 60,
+    passiveMultiplier: 2,
+  },
+  {
+    id: "cloudDiscount",
+    name: "Promo Cloud",
+    description: "Générateurs -20% pendant 45s.",
+    duration: 45,
+    generatorDiscount: 0.8,
+  },
+  {
+    id: "hackathon",
+    name: "Hackathon mondial",
+    description: "Clics et passif x1.5 pendant 45s.",
+    duration: 45,
+    clickMultiplier: 1.5,
+    passiveMultiplier: 1.5,
+  },
+];
+
+const EVENT_ROLL_INTERVAL_SECONDS = 90;
+const EVENT_TRIGGER_CHANCE = 0.4;
+
 // -----------------------------
 //  État du jeu
 // -----------------------------
@@ -414,6 +497,17 @@ const defaultGameState = {
     timesUsed: 0,
   },
   offlineBytesEarned: 0,
+  stats: {
+    totalClicks: 0,
+    bytesSpent: 0,
+    generatorsBought: 0,
+    upgradesBought: 0,
+    boostsUsed: 0,
+  },
+  activeQuests: [],
+  questExpiry: 0,
+  activeEvent: null,
+  eventRollTimer: 0,
   lastSaveTimestamp: Date.now(),
 };
 
@@ -423,6 +517,7 @@ let gameState = structuredClone(defaultGameState);
 const MAX_CODE_LINES = 40;
 let codeBuffer = [];
 let codeSnippetIndex = 0;
+let questNeedsRefresh = true;
 
 // Faux fichier de projet pour un rendu plus dense
 const CODE_SNIPPETS = [
@@ -530,6 +625,20 @@ function formatNumber(num) {
   return num.toString();
 }
 
+function formatDuration(seconds) {
+  seconds = Math.max(0, Math.floor(seconds));
+  const h = Math.floor(seconds / 3600)
+    .toString()
+    .padStart(2, "0");
+  const m = Math.floor((seconds % 3600) / 60)
+    .toString()
+    .padStart(2, "0");
+  const s = Math.floor(seconds % 60)
+    .toString()
+    .padStart(2, "0");
+  return `${h}:${m}:${s}`;
+}
+
 function getGeneratorState(id) {
   if (!gameState.generators[id]) {
     gameState.generators[id] = {
@@ -617,6 +726,14 @@ function loadGame() {
       upgrades: { ...defaultGameState.upgrades, ...(parsed.upgrades || {}) },
       generators: { ...defaultGameState.generators, ...(parsed.generators || {}) },
     };
+    gameState.stats = {
+      ...defaultGameState.stats,
+      ...(parsed.stats || {}),
+    };
+    gameState.activeQuests = parsed.activeQuests || [];
+    gameState.activeEvent = parsed.activeEvent || null;
+    gameState.questExpiry = parsed.questExpiry || 0;
+    gameState.eventRollTimer = parsed.eventRollTimer || 0;
 
     // Calcul de la production hors-ligne
     const now = Date.now();
@@ -630,6 +747,7 @@ function loadGame() {
       gameState.totalBytesEarned += offlineGain;
       gameState.offlineBytesEarned =
         (gameState.offlineBytesEarned || 0) + offlineGain;
+      updateQuestProgress("earn_bytes", offlineGain);
       showLog(
         `// Vous revenez après ${diffSeconds.toFixed(
           0
@@ -651,6 +769,9 @@ function getEffectiveClickProduction() {
   if (gameState.activeBoost.isActive) {
     base *= gameState.activeBoost.multiplier;
   }
+  if (gameState.activeEvent?.clickMultiplier) {
+    base *= gameState.activeEvent.clickMultiplier;
+  }
   return base;
 }
 
@@ -658,6 +779,9 @@ function clickCode() {
   const gain = getEffectiveClickProduction();
   gameState.bytes += gain;
   gameState.totalBytesEarned += gain;
+  gameState.stats.totalClicks = (gameState.stats.totalClicks || 0) + 1;
+  updateQuestProgress("click_times", 1);
+  updateQuestProgress("earn_bytes", gain);
   showLog(`// +${formatNumber(gain)} bytes - ligne de code écrite`);
   appendCodeLine();
   checkAchievements();
@@ -672,6 +796,11 @@ function buyUpgrade(id) {
 
   gameState.bytes -= upgrade.cost;
   gameState.upgrades[id] = true;
+  gameState.stats.bytesSpent = (gameState.stats.bytesSpent || 0) + upgrade.cost;
+  gameState.stats.upgradesBought =
+    (gameState.stats.upgradesBought || 0) + 1;
+  updateQuestProgress("buy_upgrades", 1);
+  updateQuestProgress("spend_bytes", upgrade.cost);
 
   recalculateProduction();
   showLog(`// Nouvelle compétence débloquée : ${upgrade.name}`);
@@ -685,12 +814,19 @@ function buyGenerator(id) {
 
   const genState = getGeneratorState(id);
   const cost = genState.cost;
+  const discount = gameState.activeEvent?.generatorDiscount ?? 1;
+  const effectiveCost = Math.ceil(cost * discount);
 
-  if (gameState.bytes < cost) return;
+  if (gameState.bytes < effectiveCost) return;
 
-  gameState.bytes -= cost;
+  gameState.bytes -= effectiveCost;
   genState.owned += 1;
   genState.cost = Math.ceil(cost * genDef.costMultiplier);
+  gameState.stats.bytesSpent = (gameState.stats.bytesSpent || 0) + effectiveCost;
+  gameState.stats.generatorsBought =
+    (gameState.stats.generatorsBought || 0) + 1;
+  updateQuestProgress("buy_generators", 1);
+  updateQuestProgress("spend_bytes", effectiveCost);
 
   recalculateProduction();
   showLog(`// Vous recrutez : ${genDef.name}`);
@@ -706,6 +842,8 @@ function activateBoost() {
   boost.remainingSeconds = 20;
   boost.currentCooldown = boost.cooldownSeconds;
   boost.timesUsed += 1;
+  gameState.stats.boostsUsed = (gameState.stats.boostsUsed || 0) + 1;
+  updateQuestProgress("use_boost", 1);
 
   showLog("// Hyperfocus activé : vos clics sont surchargés !");
   checkAchievements();
@@ -785,6 +923,102 @@ function checkAchievements() {
   }
 
   updateAchievementsUI();
+}
+
+// -----------------------------
+//  Quêtes quotidiennes
+// -----------------------------
+
+function createQuestInstance(def) {
+  return {
+    id: def.id,
+    description: def.description,
+    type: def.type,
+    target: def.target,
+    reward: def.reward,
+    progress: 0,
+    completed: false,
+  };
+}
+
+function hydrateQuestInstance(quest) {
+  const def = QUEST_CATALOG.find((q) => q.id === quest.id);
+  if (!def) return createQuestInstance(quest);
+  return {
+    id: def.id,
+    description: def.description,
+    type: def.type,
+    target: def.target,
+    reward: def.reward,
+    progress: quest.progress ?? 0,
+    completed: quest.completed ?? false,
+  };
+}
+
+function ensureQuestsInitialized() {
+  if (!Array.isArray(gameState.activeQuests)) {
+    gameState.activeQuests = [];
+  }
+  if (gameState.activeQuests.length) {
+    gameState.activeQuests = gameState.activeQuests.map((quest) =>
+      hydrateQuestInstance(quest)
+    );
+  }
+  if (
+    gameState.activeQuests.length === 0 ||
+    !gameState.questExpiry ||
+    Date.now() > gameState.questExpiry
+  ) {
+    regenerateQuests();
+  }
+}
+
+function regenerateQuests() {
+  const pool = [...QUEST_CATALOG];
+  const selected = [];
+  while (selected.length < QUEST_SLOTS && pool.length) {
+    const index = Math.floor(Math.random() * pool.length);
+    const def = pool.splice(index, 1)[0];
+    selected.push(createQuestInstance(def));
+  }
+  gameState.activeQuests = selected;
+  gameState.questExpiry = Date.now() + QUEST_DURATION_MS;
+  questNeedsRefresh = true;
+}
+
+function checkQuestExpiry() {
+  if (gameState.questExpiry && Date.now() > gameState.questExpiry) {
+    regenerateQuests();
+  }
+}
+
+function updateQuestProgress(type, amount = 1) {
+  if (!Array.isArray(gameState.activeQuests)) return;
+  if (!amount || amount <= 0) return;
+  let changed = false;
+  for (const quest of gameState.activeQuests) {
+    if (quest.type !== type || quest.completed) continue;
+    quest.progress = Math.min(quest.target, quest.progress + amount);
+    if (quest.progress >= quest.target && !quest.completed) {
+      quest.completed = true;
+      grantQuestReward(quest);
+    }
+    changed = true;
+  }
+  if (changed) {
+    questNeedsRefresh = true;
+  }
+}
+
+function grantQuestReward(quest) {
+  gameState.bytes += quest.reward;
+  gameState.totalBytesEarned += quest.reward;
+  showLog(
+    `// Quête terminée : ${quest.description} (+${formatNumber(
+      quest.reward
+    )} bytes)`
+  );
+  questNeedsRefresh = true;
 }
 
 // -----------------------------
@@ -992,11 +1226,13 @@ function updateUI() {
     if (!btn) continue;
 
     const genState = getGeneratorState(genDef.id);
-    btn.classList.toggle("disabled", gameState.bytes < genState.cost);
+    const discount = gameState.activeEvent?.generatorDiscount ?? 1;
+    const displayCost = Math.ceil(genState.cost * discount);
+    btn.classList.toggle("disabled", gameState.bytes < displayCost);
 
     const costSpan = btn.querySelector(".shop-item-cost");
     if (costSpan) {
-      costSpan.textContent = `${formatNumber(genState.cost)} bytes`;
+      costSpan.textContent = `${formatNumber(displayCost)} bytes`;
     }
 
     const ownedSpan = btn.querySelector(".shop-item-owned");
@@ -1004,6 +1240,15 @@ function updateUI() {
       ownedSpan.textContent = `Possédés : ${genState.owned}`;
     }
   }
+
+  if (questNeedsRefresh) {
+    updateQuestUI();
+    questNeedsRefresh = false;
+  } else {
+    updateQuestTimerDisplay();
+  }
+
+  updateEventUI();
 }
 
 function updateAchievementsUI() {
@@ -1023,6 +1268,140 @@ function updateAchievementsUI() {
   }
 }
 
+function updateQuestUI() {
+  const questContainer = document.getElementById("questList");
+  if (!questContainer) return;
+  ensureQuestsInitialized();
+  questContainer.innerHTML = "";
+
+  updateQuestTimerDisplay();
+
+  if (!gameState.activeQuests.length) {
+    const empty = document.createElement("div");
+    empty.className = "quest-card";
+    empty.textContent = "// Aucune quête disponible pour le moment.";
+    questContainer.appendChild(empty);
+    return;
+  }
+
+  for (const quest of gameState.activeQuests) {
+    const card = document.createElement("div");
+    card.className = "quest-card";
+    if (quest.completed) {
+      card.classList.add("quest-completed");
+    }
+
+    const header = document.createElement("div");
+    header.className = "quest-header";
+
+    const name = document.createElement("span");
+    name.className = "quest-name";
+    name.textContent = quest.description;
+
+    const reward = document.createElement("span");
+    reward.className = "quest-reward";
+    reward.textContent = `+${formatNumber(quest.reward)} bytes`;
+
+    header.appendChild(name);
+    header.appendChild(reward);
+
+    const progressBar = document.createElement("div");
+    progressBar.className = "quest-progress-bar";
+    const fill = document.createElement("div");
+    fill.className = "quest-progress-fill";
+    const ratio = quest.target > 0 ? quest.progress / quest.target : 1;
+    fill.style.width = `${Math.min(1, ratio) * 100}%`;
+    progressBar.appendChild(fill);
+
+    const label = document.createElement("div");
+    label.className = "quest-progress-label";
+    label.textContent = `${formatNumber(quest.progress)} / ${formatNumber(
+      quest.target
+    )}`;
+
+    card.appendChild(header);
+    card.appendChild(progressBar);
+    card.appendChild(label);
+
+    questContainer.appendChild(card);
+  }
+}
+
+function updateQuestTimerDisplay() {
+  const timerEl = document.getElementById("questTimer");
+  if (!timerEl) return;
+  if (!gameState.questExpiry) {
+    timerEl.textContent = "--:--:--";
+    return;
+  }
+  const remaining = (gameState.questExpiry - Date.now()) / 1000;
+  timerEl.textContent = formatDuration(remaining);
+}
+
+// -----------------------------
+//  Événements temporaires
+// -----------------------------
+
+function startEvent(eventDef) {
+  gameState.activeEvent = {
+    id: eventDef.id,
+    name: eventDef.name,
+    description: eventDef.description,
+    clickMultiplier: eventDef.clickMultiplier ?? 1,
+    passiveMultiplier: eventDef.passiveMultiplier ?? 1,
+    generatorDiscount: eventDef.generatorDiscount ?? 1,
+    remainingSeconds: eventDef.duration,
+  };
+  showLog(`// Événement : ${eventDef.name} — ${eventDef.description}`);
+  updateEventUI();
+}
+
+function maybeTriggerRandomEvent() {
+  if (gameState.activeEvent) return;
+  if (Math.random() > EVENT_TRIGGER_CHANCE) return;
+  const event =
+    EVENT_CATALOG[Math.floor(Math.random() * EVENT_CATALOG.length)];
+  startEvent(event);
+}
+
+function handleEventTimers() {
+  if (gameState.activeEvent) {
+    gameState.activeEvent.remainingSeconds -= 1;
+    if (gameState.activeEvent.remainingSeconds <= 0) {
+      showLog("// L'événement spécial est terminé.");
+      gameState.activeEvent = null;
+    }
+    updateEventUI();
+    return;
+  }
+
+  gameState.eventRollTimer = (gameState.eventRollTimer || 0) + 1;
+  if (gameState.eventRollTimer >= EVENT_ROLL_INTERVAL_SECONDS) {
+    gameState.eventRollTimer = 0;
+    maybeTriggerRandomEvent();
+  }
+}
+
+function updateEventUI() {
+  const banner = document.getElementById("eventBanner");
+  if (!banner) return;
+  const nameEl = document.getElementById("eventName");
+  const timerEl = document.getElementById("eventTimer");
+  const descEl = document.getElementById("eventDescription");
+
+  if (gameState.activeEvent) {
+    banner.classList.remove("hidden");
+    if (nameEl) nameEl.textContent = gameState.activeEvent.name;
+    if (descEl) descEl.textContent = gameState.activeEvent.description;
+    if (timerEl)
+      timerEl.textContent = formatDuration(
+        gameState.activeEvent.remainingSeconds
+      );
+  } else {
+    banner.classList.add("hidden");
+  }
+}
+
 // -----------------------------
 //  Boucle de jeu
 // -----------------------------
@@ -1030,9 +1409,16 @@ function updateAchievementsUI() {
 function gameLoopTick() {
   // Production passive
   if (gameState.productionPerSecond > 0) {
-    gameState.bytes += gameState.productionPerSecond;
-    gameState.totalBytesEarned += gameState.productionPerSecond;
-    appendCodeLine();
+    let passiveGain = gameState.productionPerSecond;
+    if (gameState.activeEvent?.passiveMultiplier) {
+      passiveGain *= gameState.activeEvent.passiveMultiplier;
+    }
+    gameState.bytes += passiveGain;
+    gameState.totalBytesEarned += passiveGain;
+    updateQuestProgress("earn_bytes", passiveGain);
+    if (passiveGain > 0) {
+      appendCodeLine();
+    }
   }
 
   // Gestion du boost actif / cooldown
@@ -1050,6 +1436,8 @@ function gameLoopTick() {
     if (boost.currentCooldown < 0) boost.currentCooldown = 0;
   }
 
+  handleEventTimers();
+  checkQuestExpiry();
   checkAchievements();
   updateUI();
 }
@@ -1070,11 +1458,14 @@ function initGame() {
   // Charger la sauvegarde
   loadGame();
   recalculateProduction();
+  ensureQuestsInitialized();
 
   // Générer le magasin une fois
   renderShop();
   updateUI();
   updateAchievementsUI();
+  updateQuestUI();
+  updateEventUI();
 
   // Boucle de jeu passive
   setInterval(gameLoopTick, TICK_INTERVAL_MS);

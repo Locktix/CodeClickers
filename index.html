@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Code Clicker : De Zéro au Mégacorp</title>
     <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="ui-extras.css" />
   </head>
   <body>
     <div id="app">
@@ -43,6 +44,15 @@
             <div class="code-output-header">// main.js</div>
             <pre id="codeStream" class="code-stream">// En attente de votre premier commit...</pre>
           </div>
+          <div id="eventBanner" class="event-banner hidden">
+            <div class="event-banner-header">
+              <span id="eventName" class="event-name">Événement</span>
+              <span id="eventTimer" class="event-timer"></span>
+            </div>
+            <p id="eventDescription" class="event-description">
+              Un événement spécial est en cours...
+            </p>
+          </div>
           <div class="log-line">
             <span id="lastActionLog">// En attente de votre premier commit...</span>
           </div>
@@ -62,6 +72,14 @@
           <h2>Badges &amp; Achievements</h2>
           <div id="achievementList" class="shop-list achievement-list">
             <!-- Badges & achievements générés dynamiquement -->
+          </div>
+
+          <div class="quest-header-row">
+            <h2>Quêtes du jour</h2>
+            <span class="quest-timer">Reset dans <span id="questTimer">--:--:--</span></span>
+          </div>
+          <div id="questList" class="quest-list">
+            <!-- Quêtes générées dynamiquement -->
           </div>
         </section>
       </main>
