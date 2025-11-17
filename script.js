@@ -206,6 +206,105 @@ const defaultGameState = {
 
 let gameState = structuredClone(defaultGameState);
 
+// Buffer pour l'affichage du code "en temps réel" (non sauvegardé)
+const MAX_CODE_LINES = 40;
+let codeBuffer = [];
+let codeSnippetIndex = 0;
+
+// Faux fichier de projet pour un rendu plus dense
+const CODE_SNIPPETS = [
+  "import { createApp } from 'code-clicker';",
+  "",
+  "const config = {",
+  "  title: 'Code Clicker : De Zéro au Mégacorp',",
+  "  initialBytes: 0,",
+  "  difficulty: 'normal',",
+  "};",
+  "",
+  "const state = {",
+  "  bytes: 0,",
+  "  perClick: 1,",
+  "  perSecond: 0,",
+  "};",
+  "",
+  "function computeBytesPerClick(base, boost) {",
+  "  return base * (boost?.multiplier ?? 1);",
+  "}",
+  "",
+  "function handleClick() {",
+  "  const gain = computeBytesPerClick(state.perClick, state.boost);",
+  "  state.bytes += gain;",
+  "  log(`+${gain} bytes`);",
+  "}",
+  "",
+  "async function fetchLeaderboard() {",
+  "  try {",
+  "    const res = await fetch('/api/leaderboard');",
+  "    if (!res.ok) throw new Error('network error');",
+  "    return res.json();",
+  "  } catch (err) {",
+  "    console.error('[leaderboard]', err);",
+  "    return [];",
+  "  }",
+  "}",
+  "",
+  "class Generator {",
+  "  constructor(name, baseCost, baseProduction) {",
+  "    this.name = name;",
+  "    this.baseCost = baseCost;",
+  "    this.baseProduction = baseProduction;",
+  "    this.owned = 0;",
+  "  }",
+  "",
+  "  get cost() {",
+  "    return Math.floor(this.baseCost * Math.pow(1.15, this.owned));",
+  "  }",
+  "",
+  "  buy(bytes) {",
+  "    if (bytes < this.cost) return false;",
+  "    this.owned += 1;",
+  "    return true;",
+  "  }",
+  "}",
+  "",
+  "const junior = new Generator('Junior Dev', 25, 0.5);",
+  "const senior = new Generator('Senior Dev', 600, 8);",
+  "",
+  "function tick(deltaSeconds) {",
+  "  const passive =",
+  "    junior.owned * junior.baseProduction +",
+  "    senior.owned * senior.baseProduction;",
+  "  state.bytes += passive * deltaSeconds;",
+  "}",
+  "",
+  "// simplistic event bus",
+  "const events = new Map();",
+  "",
+  "function on(event, cb) {",
+  "  if (!events.has(event)) events.set(event, []);",
+  "  events.get(event).push(cb);",
+  "}",
+  "",
+  "function emit(event, payload) {",
+  "  const listeners = events.get(event) ?? [];",
+  "  for (const listener of listeners) {",
+  "    try {",
+  "      listener(payload);",
+  "    } catch (err) {",
+  "      console.error('[listener error]', err);",
+  "    }",
+  "  }",
+  "}",
+  "",
+  "on('achievement:unlock', (a) => {",
+  "  console.log('Unlocked', a.id);",
+  "});",
+  "",
+  "export function bootstrap() {",
+  "  createApp(config, state).mount('#app');",
+  "}",
+];
+
 // -----------------------------
 //  Utilitaires
 // -----------------------------
@@ -345,6 +444,7 @@ function clickCode() {
   gameState.bytes += gain;
   gameState.totalBytesEarned += gain;
   showLog(`// +${formatNumber(gain)} bytes - ligne de code écrite`);
+  appendCodeLine();
   checkAchievements();
   updateUI();
 }
@@ -467,6 +567,26 @@ function showLog(text) {
   if (el) {
     el.textContent = text;
   }
+}
+
+function getNextCodeLine() {
+  if (CODE_SNIPPETS.length === 0) return "// ...";
+  const line = CODE_SNIPPETS[codeSnippetIndex % CODE_SNIPPETS.length];
+  codeSnippetIndex++;
+  return line;
+}
+
+function appendCodeLine() {
+  const el = document.getElementById("codeStream");
+  if (!el) return;
+
+  const line = getNextCodeLine();
+  codeBuffer.push(line);
+  if (codeBuffer.length > MAX_CODE_LINES) {
+    codeBuffer = codeBuffer.slice(-MAX_CODE_LINES);
+  }
+
+  el.textContent = codeBuffer.join("\n");
 }
 
 function createUpgradeElement(upgrade) {
@@ -683,6 +803,7 @@ function gameLoopTick() {
   if (gameState.productionPerSecond > 0) {
     gameState.bytes += gameState.productionPerSecond;
     gameState.totalBytesEarned += gameState.productionPerSecond;
+    appendCodeLine();
   }
 
   // Gestion du boost actif / cooldown

@@ -158,6 +158,51 @@ body {
 }
 
 /* =============================
+   Flux de code "en temps réel"
+   ============================= */
+
+.code-output {
+  margin-top: 14px;
+  border-radius: 10px;
+  background: radial-gradient(circle at top left, #020617, #020617, #020617);
+  box-shadow: 0 0 0 1px rgba(30, 64, 175, 0.5),
+    inset 0 0 30px rgba(15, 23, 42, 0.95);
+  overflow: hidden;
+}
+
+.code-output-header {
+  padding: 4px 10px;
+  font-size: 0.75rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #6b7280;
+  border-bottom: 1px solid rgba(31, 41, 55, 0.9);
+  background: linear-gradient(90deg, #020617, #020617, #0f172a);
+}
+
+.code-stream {
+  padding: 8px 10px 10px 10px;
+  max-height: 260px;
+  overflow: hidden;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  color: #e5e7eb;
+  white-space: pre-wrap;
+}
+
+.code-stream span.highlight {
+  color: #22c55e;
+}
+
+.code-stream span.keyword {
+  color: #60a5fa;
+}
+
+.code-stream span.string {
+  color: #f97316;
+}
+
+/* =============================
    Bouton Hyperfocus (boost)
    ============================= */
 
