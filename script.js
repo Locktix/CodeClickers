@@ -1,0 +1,459 @@
+// =============================
+//  Code Clicker : De Zéro au Mégacorp
+// =============================
+
+// -----------------------------
+//  Constantes & catalogues
+// -----------------------------
+
+const SAVE_KEY = "codeClickerSave_v1";
+const SAVE_INTERVAL_MS = 10_000;
+const TICK_INTERVAL_MS = 1_000; // production passive par seconde
+
+// Catalogues statiques (non stockés dans localStorage)
+const UPGRADE_CATALOG = [
+  {
+    id: "commenterCode",
+    name: "Commenter le code",
+    description: "x2 Bytes par clic.",
+    cost: 50,
+    type: "multiplier_click",
+    value: 2,
+  },
+  {
+    id: "apprendreCss",
+    name: "Apprendre le CSS",
+    description: "+2 Bytes par clic.",
+    cost: 150,
+    type: "flat_click",
+    value: 2,
+  },
+  {
+    id: "optimiserAlgo",
+    name: "Optimiser les algos",
+    description: "x2 production passive.",
+    cost: 500,
+    type: "multiplier_passive",
+    value: 2,
+  },
+  {
+    id: "frameworkJs",
+    name: "Maîtriser un framework JS",
+    description: "+10 Bytes / sec.",
+    cost: 1500,
+    type: "flat_passive",
+    value: 10,
+  },
+];
+
+const GENERATOR_CATALOG = [
+  {
+    id: "juniorDev",
+    name: "Stagiaire Junior",
+    baseCost: 25,
+    baseProduction: 0.5, // bytes / sec
+    costMultiplier: 1.15,
+    description: "Écrit un peu de code quand il comprend la spec.",
+  },
+  {
+    id: "freelancer",
+    name: "Freelancer",
+    baseCost: 120,
+    baseProduction: 2,
+    costMultiplier: 1.15,
+    description: "Facture à l'heure, pas au résultat.",
+  },
+  {
+    id: "devSenior",
+    name: "Dev Senior",
+    baseCost: 600,
+    baseProduction: 8,
+    costMultiplier: 1.15,
+    description: "Automatise les tâches répétitives.",
+  },
+  {
+    id: "equipeProduit",
+    name: "Équipe Produit",
+    baseCost: 2500,
+    baseProduction: 30,
+    costMultiplier: 1.18,
+    description: "Livrent des features pendant que vous dormez.",
+  },
+];
+
+// -----------------------------
+//  État du jeu
+// -----------------------------
+
+const defaultGameState = {
+  bytes: 0,
+  productionPerClick: 1,
+  productionPerSecond: 0,
+  upgrades: {}, // ex: { commenterCode: true }
+  generators: {}, // ex: { juniorDev: { owned: 1, cost: 28 } }
+  lastSaveTimestamp: Date.now(),
+};
+
+let gameState = structuredClone(defaultGameState);
+
+// -----------------------------
+//  Utilitaires
+// -----------------------------
+
+function formatNumber(num) {
+  if (num >= 1_000_000_000) return (num / 1_000_000_000).toFixed(2) + "B";
+  if (num >= 1_000_000) return (num / 1_000_000).toFixed(2) + "M";
+  if (num >= 1_000) return (num / 1_000).toFixed(2) + "K";
+  if (num % 1 !== 0) return num.toFixed(2);
+  return num.toString();
+}
+
+function getGeneratorState(id) {
+  if (!gameState.generators[id]) {
+    gameState.generators[id] = {
+      owned: 0,
+      cost: GENERATOR_CATALOG.find((g) => g.id === id)?.baseCost ?? 0,
+    };
+  }
+  return gameState.generators[id];
+}
+
+// -----------------------------
+//  Calculs de production
+// -----------------------------
+
+function recalculateProduction() {
+  // Production passive de base via générateurs
+  let passive = 0;
+
+  for (const genDef of GENERATOR_CATALOG) {
+    const genState = getGeneratorState(genDef.id);
+    passive += genState.owned * genDef.baseProduction;
+  }
+
+  // Production par clic de base
+  let click = defaultGameState.productionPerClick;
+
+  // Appliquer les upgrades
+  for (const upgrade of UPGRADE_CATALOG) {
+    if (!gameState.upgrades[upgrade.id]) continue;
+
+    switch (upgrade.type) {
+      case "multiplier_click":
+        click *= upgrade.value;
+        break;
+      case "flat_click":
+        click += upgrade.value;
+        break;
+      case "multiplier_passive":
+        passive *= upgrade.value;
+        break;
+      case "flat_passive":
+        passive += upgrade.value;
+        break;
+    }
+  }
+
+  gameState.productionPerClick = click;
+  gameState.productionPerSecond = passive;
+}
+
+// -----------------------------
+//  Sauvegarde & chargement
+// -----------------------------
+
+function saveGame() {
+  try {
+    gameState.lastSaveTimestamp = Date.now();
+    const toSave = JSON.stringify(gameState);
+    localStorage.setItem(SAVE_KEY, toSave);
+  } catch (err) {
+    console.error("Erreur de sauvegarde", err);
+  }
+}
+
+function loadGame() {
+  try {
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (!raw) {
+      gameState = structuredClone(defaultGameState);
+      return;
+    }
+
+    const parsed = JSON.parse(raw);
+    gameState = {
+      ...structuredClone(defaultGameState),
+      ...parsed,
+      upgrades: { ...defaultGameState.upgrades, ...(parsed.upgrades || {}) },
+      generators: { ...defaultGameState.generators, ...(parsed.generators || {}) },
+    };
+
+    // Calcul de la production hors-ligne
+    const now = Date.now();
+    const last = parsed.lastSaveTimestamp ?? now;
+    const diffSeconds = Math.max(0, (now - last) / 1000);
+
+    recalculateProduction();
+    const offlineGain = gameState.productionPerSecond * diffSeconds;
+    if (offlineGain > 0) {
+      gameState.bytes += offlineGain;
+      showLog(
+        `// Vous revenez après ${diffSeconds.toFixed(
+          0
+        )}s : +${formatNumber(offlineGain)} bytes hors-ligne`
+      );
+    }
+  } catch (err) {
+    console.error("Erreur de chargement, réinitialisation", err);
+    gameState = structuredClone(defaultGameState);
+  }
+}
+
+// -----------------------------
+//  Interactions de jeu
+// -----------------------------
+
+function clickCode() {
+  gameState.bytes += gameState.productionPerClick;
+  showLog(
+    `// +${formatNumber(
+      gameState.productionPerClick
+    )} bytes - ligne de code écrite`
+  );
+  updateUI();
+}
+
+function buyUpgrade(id) {
+  const upgrade = UPGRADE_CATALOG.find((u) => u.id === id);
+  if (!upgrade) return;
+  if (gameState.upgrades[id]) return; // déjà acheté
+  if (gameState.bytes < upgrade.cost) return;
+
+  gameState.bytes -= upgrade.cost;
+  gameState.upgrades[id] = true;
+
+  recalculateProduction();
+  showLog(`// Nouvelle compétence débloquée : ${upgrade.name}`);
+  updateUI();
+}
+
+function buyGenerator(id) {
+  const genDef = GENERATOR_CATALOG.find((g) => g.id === id);
+  if (!genDef) return;
+
+  const genState = getGeneratorState(id);
+  const cost = genState.cost;
+
+  if (gameState.bytes < cost) return;
+
+  gameState.bytes -= cost;
+  genState.owned += 1;
+  genState.cost = Math.ceil(cost * genDef.costMultiplier);
+
+  recalculateProduction();
+  showLog(`// Vous recrutez : ${genDef.name}`);
+  updateUI();
+}
+
+function hardReset() {
+  if (!window.confirm("Réinitialiser la partie ? Cette action est définitive.")) {
+    return;
+  }
+  gameState = structuredClone(defaultGameState);
+  saveGame();
+  showLog("// Partie réinitialisée. Nouveau projet, même motivation.");
+  updateUI();
+}
+
+// -----------------------------
+//  UI
+// -----------------------------
+
+function showLog(text) {
+  const el = document.getElementById("lastActionLog");
+  if (el) {
+    el.textContent = text;
+  }
+}
+
+function createUpgradeElement(upgrade) {
+  const container = document.createElement("button");
+  container.className = "shop-item";
+  container.dataset.id = upgrade.id;
+
+  const header = document.createElement("div");
+  header.className = "shop-item-header";
+
+  const nameSpan = document.createElement("span");
+  nameSpan.className = "shop-item-name";
+  nameSpan.textContent = upgrade.name;
+
+  const costSpan = document.createElement("span");
+  costSpan.className = "shop-item-cost";
+  costSpan.textContent = `${formatNumber(upgrade.cost)} bytes`;
+
+  header.appendChild(nameSpan);
+  header.appendChild(costSpan);
+
+  const effectSpan = document.createElement("span");
+  effectSpan.className = "shop-item-effect";
+  effectSpan.textContent = upgrade.description;
+
+  container.appendChild(header);
+  container.appendChild(effectSpan);
+
+  container.addEventListener("click", () => buyUpgrade(upgrade.id));
+
+  return container;
+}
+
+function createGeneratorElement(genDef) {
+  const container = document.createElement("button");
+  container.className = "shop-item";
+  container.dataset.id = genDef.id;
+
+  const header = document.createElement("div");
+  header.className = "shop-item-header";
+
+  const nameSpan = document.createElement("span");
+  nameSpan.className = "shop-item-name";
+  nameSpan.textContent = genDef.name;
+
+  const costSpan = document.createElement("span");
+  costSpan.className = "shop-item-cost";
+  costSpan.textContent = `${formatNumber(genDef.baseCost)} bytes`;
+
+  header.appendChild(nameSpan);
+  header.appendChild(costSpan);
+
+  const effectSpan = document.createElement("span");
+  effectSpan.className = "shop-item-effect";
+  effectSpan.textContent = `${genDef.baseProduction} bytes/sec — ${genDef.description}`;
+
+  const ownedSpan = document.createElement("span");
+  ownedSpan.className = "shop-item-owned";
+  ownedSpan.textContent = "Possédés : 0";
+
+  container.appendChild(header);
+  container.appendChild(effectSpan);
+  container.appendChild(ownedSpan);
+
+  container.addEventListener("click", () => buyGenerator(genDef.id));
+
+  return container;
+}
+
+function renderShop() {
+  const upgradeList = document.getElementById("upgradeList");
+  const generatorList = document.getElementById("generatorList");
+  if (!upgradeList || !generatorList) return;
+
+  upgradeList.innerHTML = "";
+  generatorList.innerHTML = "";
+
+  for (const upgrade of UPGRADE_CATALOG) {
+    upgradeList.appendChild(createUpgradeElement(upgrade));
+  }
+
+  for (const genDef of GENERATOR_CATALOG) {
+    generatorList.appendChild(createGeneratorElement(genDef));
+  }
+}
+
+function updateUI() {
+  const bytesEl = document.getElementById("bytesDisplay");
+  const ppsEl = document.getElementById("ppsDisplay");
+  const ppcEl = document.getElementById("ppcDisplay");
+
+  if (bytesEl) bytesEl.textContent = formatNumber(gameState.bytes);
+  if (ppsEl) ppsEl.textContent = formatNumber(gameState.productionPerSecond);
+  if (ppcEl) ppcEl.textContent = formatNumber(gameState.productionPerClick);
+
+  // Mettre à jour les éléments du shop
+  for (const upgrade of UPGRADE_CATALOG) {
+    const btn = document.querySelector(
+      `.shop-item[data-id="${upgrade.id}"]`
+    );
+    if (!btn) continue;
+
+    const owned = !!gameState.upgrades[upgrade.id];
+
+    btn.classList.toggle("disabled", gameState.bytes < upgrade.cost || owned);
+    btn.classList.toggle("upgrade-owned", owned);
+
+    // mettre à jour texte de prix
+    const costSpan = btn.querySelector(".shop-item-cost");
+    if (costSpan) {
+      costSpan.textContent = owned
+        ? "Acheté"
+        : `${formatNumber(upgrade.cost)} bytes`;
+    }
+  }
+
+  for (const genDef of GENERATOR_CATALOG) {
+    const btn = document.querySelector(
+      `.shop-item[data-id="${genDef.id}"]`
+    );
+    if (!btn) continue;
+
+    const genState = getGeneratorState(genDef.id);
+    btn.classList.toggle("disabled", gameState.bytes < genState.cost);
+
+    const costSpan = btn.querySelector(".shop-item-cost");
+    if (costSpan) {
+      costSpan.textContent = `${formatNumber(genState.cost)} bytes`;
+    }
+
+    const ownedSpan = btn.querySelector(".shop-item-owned");
+    if (ownedSpan) {
+      ownedSpan.textContent = `Possédés : ${genState.owned}`;
+    }
+  }
+}
+
+// -----------------------------
+//  Boucle de jeu
+// -----------------------------
+
+function gameLoopTick() {
+  if (gameState.productionPerSecond > 0) {
+    gameState.bytes += gameState.productionPerSecond;
+    updateUI();
+  }
+}
+
+// -----------------------------
+//  Initialisation
+// -----------------------------
+
+function initGame() {
+  // Lier les boutons principaux
+  const clickBtn = document.getElementById("clickButton");
+  const resetBtn = document.getElementById("resetButton");
+  if (clickBtn) clickBtn.addEventListener("click", clickCode);
+  if (resetBtn) resetBtn.addEventListener("click", hardReset);
+
+  // Charger la sauvegarde
+  loadGame();
+  recalculateProduction();
+
+  // Générer le magasin une fois
+  renderShop();
+  updateUI();
+
+  // Boucle de jeu passive
+  setInterval(gameLoopTick, TICK_INTERVAL_MS);
+
+  // Sauvegarde périodique
+  setInterval(saveGame, SAVE_INTERVAL_MS);
+
+  // Sauvegarde à la fermeture
+  window.addEventListener("beforeunload", () => {
+    saveGame();
+  });
+}
+
+// Lancement
+window.addEventListener("DOMContentLoaded", initGame);
+
+

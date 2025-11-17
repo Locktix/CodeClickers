@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Code Clicker : De Zéro au Mégacorp</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header class="top-bar">
+        <div class="logo">Code Clicker</div>
+        <div class="stats">
+          <div class="stat">
+            <span class="label">Bytes</span>
+            <span id="bytesDisplay" class="value">0</span>
+          </div>
+          <div class="stat">
+            <span class="label">Production / sec</span>
+            <span id="ppsDisplay" class="value">0</span>
+          </div>
+          <div class="stat">
+            <span class="label">Production / clic</span>
+            <span id="ppcDisplay" class="value">1</span>
+          </div>
+        </div>
+      </header>
+
+      <main class="layout">
+        <section class="panel center-panel">
+          <h2>Studio de Dev</h2>
+          <p class="description">
+            Vous débutez en freelance avec zéro client. Cliquez pour écrire du code,
+            gagnez des bytes, et construisez votre mégacorp de développement.
+          </p>
+          <button id="clickButton" class="primary-click">
+            Écrire une ligne de code (+1 Byte)
+          </button>
+          <div class="log-line">
+            <span id="lastActionLog">// En attente de votre premier commit...</span>
+          </div>
+        </section>
+
+        <section class="panel shop-panel">
+          <h2>Compétences</h2>
+          <div id="upgradeList" class="shop-list">
+            <!-- Boutons de compétences générés dynamiquement -->
+          </div>
+
+          <h2>Générateurs</h2>
+          <div id="generatorList" class="shop-list">
+            <!-- Boutons de générateurs générés dynamiquement -->
+          </div>
+        </section>
+      </main>
+
+      <footer class="footer">
+        <span>Progression sauvegardée automatiquement.</span>
+        <button id="resetButton" class="secondary-button">
+          Réinitialiser la partie
+        </button>
+      </footer>
+    </div>
+
+    <script src="script.js"></script>
+  </body>
+</html>
+
+
