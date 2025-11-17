@@ -59,6 +59,46 @@ const ACHIEVEMENT_CATALOG = [
     name: "Collectionneur de badges",
     description: "Débloquer au moins 10 achievements.",
   },
+  {
+    id: "tera_click",
+    name: "Frappe Terabit",
+    description: "Atteindre 1 000 Bytes par clic.",
+  },
+  {
+    id: "giga_factory",
+    name: "Giga Factory",
+    description: "Atteindre 10 000 Bytes par seconde.",
+  },
+  {
+    id: "legend_of_code",
+    name: "Légende du code",
+    description: "Cumuler 1 000 000 000 bytes écrits.",
+  },
+  {
+    id: "army_of_devs",
+    name: "Armée de devs",
+    description: "Posséder 50 générateurs au total.",
+  },
+  {
+    id: "automation_architect",
+    name: "Architecte de l'automatisation",
+    description: "Acheter 15 upgrades de compétences.",
+  },
+  {
+    id: "offline_tycoon",
+    name: "Magnat hors-ligne",
+    description: "Gagner 1 000 000 bytes en étant hors-ligne.",
+  },
+  {
+    id: "hyperfocus_master",
+    name: "Maître du Flow",
+    description: "Activer Hyperfocus 20 fois.",
+  },
+  {
+    id: "badge_mythic",
+    name: "Collection mythique",
+    description: "Débloquer 18 achievements.",
+  },
 ];
 
 const BADGE_ICONS = {
@@ -73,6 +113,14 @@ const BADGE_ICONS = {
   factory_mode: "🏭",
   offline_grinder: "🌙",
   collectionneur: "🏆",
+  tera_click: "💥",
+  giga_factory: "🏗️",
+  legend_of_code: "🧠",
+  army_of_devs: "👨‍👩‍👧‍👦",
+  automation_architect: "🧩",
+  offline_tycoon: "🌌",
+  hyperfocus_master: "🚀",
+  badge_mythic: "💠",
 };
 
 function formatNumber(num) {
